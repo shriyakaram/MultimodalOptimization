@@ -209,7 +209,7 @@ end
 
 """
     Create the vector of dropoff routes for a line/station
-    Implemented for kappa = 4 for now 
+    Implemented for kappa = 4 
 """
 function create_dropoff_routes_line_station(kappa::Int, max_on_demand_time::Int, line::Int, station::Int, time_horizon::Float64,
         ond_locations_data::DataFrame, transit_stops::DataFrame, routes::Vector{DropoffRoute}, passengers::Vector{Passenger}, 

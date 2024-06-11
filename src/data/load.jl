@@ -64,7 +64,7 @@ end
 
 """
     Create drop-off routes for all lines/stations
-    Implemented for kappa = 4 for now 
+    Implemented for kappa = 4
 """
 function create_dropoff_routes(kappa::Int, max_on_demand_time::Int, time_horizon::Float64, ond_locations_data::DataFrame, 
     transit_stops::DataFrame, passengers::Vector{Passenger}, on_demand_time_step::Int, max_waiting::Int)
