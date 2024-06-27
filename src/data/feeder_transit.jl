@@ -37,11 +37,7 @@ function check_origin_node_feeder(origin_node::TransitNode, origin::Tuple{Float6
     station_boarding_time = origin_node.time
     station_location = station_lat_lon(origin_station, transit_stops_line)
     driving_time_origin_station = driving_time(origin, station_location, transit_time_step)
-    if (departure_time + driving_time_origin_station) <= station_boarding_time
-        return true
-    else
-        return false
-    end
+    return (departure_time + driving_time_origin_station) <= station_boarding_time
 end
 
 """
@@ -104,14 +100,13 @@ function create_passenger_transit_routes_feeder(passenger_id::Int, line_frequenc
 
     for line_frequency in line_frequency_list
         line = line_frequency.line
-        frequency = line_frequency.frequency
         transit_stops_line = filter(row -> row.line == line, transit_stops)
         routes = find_routes_feeder(line_frequency, origin_zone, origin, destination_zone, departure_time, transit_stops_line, 
             transit_time_step)
 
         if !isempty(routes)
             routes_cost = [compute_feeder_route_time(r) for r in routes]
-            ptr = PassengerTransitRoute(passenger_id, line, frequency, routes, routes_cost)
+            ptr = PassengerTransitRoute(passenger_id, line, routes, routes_cost)
             push!(passenger_feeder_routes, ptr)
         end
     end

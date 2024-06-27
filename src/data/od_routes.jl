@@ -110,7 +110,7 @@ function compute_route_cost(num_passenger_types::Int, num_passenger_dict::Dict{I
 
     total_route_cost = total_waiting_time + intragroup_latency + cumul_origin_time + cumul_dest_time
     if (total_route_cost <= max_on_demand_time) && (check_detour(num_passenger_types, origin_order, destination_order, 
-        origin_passenger_travel_times, destination_passenger_travel_times, ond_locations_data, on_demand_time_step))
+        origin_passenger_travel_times, destination_passenger_travel_times, ond_locations_data, on_demand_time_step)) 
         return total_route_cost
     else
         return -1
@@ -152,98 +152,14 @@ function check_detour(num_passenger_types::Int, origin_order::Vector{Int}, desti
         push!(total_detours, detour)
     end
 
-    if any(x -> x > 10, total_detours)
-        return false
-    else
-        return true
-    end
-end
-
-"""
-    Calculate route time components by returning a time-space dictionary for routes
-"""
-function create_time_zone_dict(start_time::Float64, num_passenger_types::Int, origin_order::Vector{Int}, destination_order::Vector{Int}, 
-    ond_locations_data::DataFrame, time_horizon::Float64, on_demand_time_step::Int)
-
-    #adjust travel times based on intragroup latency
-    origin_passenger_travel_times, destination_passenger_travel_times = compute_travel_times(num_passenger_types, origin_order, 
-        destination_order, ond_locations_data, on_demand_time_step)
-
-    #check if end time exceeds time horizon
-    time_zone_dict = Dict{Int, Int}()  
-    time_zone_dict[0] = 0
-    end_time = start_time + sum(origin_passenger_travel_times) + sum(destination_passenger_travel_times)
-    if end_time > time_horizon
-        return time_zone_dict
-    end
-
-    #create order of zones
-    all_zones = Int[]
-    for i in origin_order
-        push!(all_zones, extract_origin_zone(i, ond_locations_data))
-    end
-
-    for i in destination_order
-        push!(all_zones, extract_destination_zone(i, ond_locations_data))
-    end
-
-    #single capacity 
-    time_zone_vector = fill(0, Int(time_horizon))
-    start_time = Int(start_time)
-    if num_passenger_types == 1
-        first_time = start_time + Int(floor(origin_passenger_travel_times[1]/2))
-        second_time = first_time + Int(ceil(origin_passenger_travel_times[1]/2))
-        for t in start_time:1:first_time
-            time_zone_vector[t] = all_zones[1]
-        end
-        for t in first_time+1:1:second_time
-            time_zone_vector[t] = all_zones[2]
-        end
-        for i in collect(on_demand_time_step:on_demand_time_step:Int(time_horizon))
-            time_zone_dict[i] = time_zone_vector[i]
-        end
-    end
-    
-    #capacity >= 2
-    times = [start_time]
-    for i in 1:num_passenger_types
-        push!(times, times[end] + Int(floor(origin_passenger_travel_times[i]/2)))
-        push!(times, times[end] + Int(ceil(origin_passenger_travel_times[i]/2)))
-    end
-    for i in 1:num_passenger_types-1
-        push!(times, times[end] + Int(floor(destination_passenger_travel_times[i]/2)))
-        push!(times, times[end] + Int(ceil(destination_passenger_travel_times[i]/2)))
-    end
-    
-    for t in times[1]:1:times[2]
-        time_zone_vector[t] = all_zones[1]
-    end
-
-    zone_idx = 2
-    for i in 2:1:length(times)-1
-        for t in times[i]+1:1:times[i+1]
-            time_zone_vector[t] = all_zones[zone_idx]
-        end
-        if i % 2 == 1
-            zone_idx += 1
-        end
-    end
-
-    for t in times[end-1]+1:1:times[end]
-        time_zone_vector[t] = all_zones[end]
-    end
-    for i in collect(on_demand_time_step:on_demand_time_step:Int(time_horizon))
-        time_zone_dict[i] = time_zone_vector[i]
-    end
-    return time_zone_dict
+    return !any(x -> x > 10, total_detours)
 end
 
 """
     Create an on-demand route
 """
 function create_one_route(start_time::Float64, num_passenger_types::Int, origin_order::Vector{Int}, destination_order::Vector{Int}, 
-        num_passenger_dict::Dict{Int, Int}, ond_locations_data::DataFrame, max_on_demand_time::Int, time_horizon::Float64,
-        on_demand_time_step::Int)
+        num_passenger_dict::Dict{Int, Int}, ond_locations_data::DataFrame, max_on_demand_time::Int, on_demand_time_step::Int)
 
     origin_passenger_travel_times, destination_passenger_travel_times = compute_travel_times(num_passenger_types, origin_order, 
         destination_order, ond_locations_data, on_demand_time_step)
@@ -252,30 +168,30 @@ function create_one_route(start_time::Float64, num_passenger_types::Int, origin_
     waiting_times = compute_waiting_time(start_time, num_passenger_types, origin_order, origin_passenger_travel_times, ond_locations_data)
     passenger_cost = compute_route_cost(num_passenger_types, num_passenger_dict, origin_order, destination_order, origin_passenger_travel_times, 
         destination_passenger_travel_times, max_on_demand_time, waiting_times, ond_locations_data, on_demand_time_step)
-    time_zone_dict = create_time_zone_dict(start_time, num_passenger_types, origin_order, destination_order, 
-        ond_locations_data, time_horizon, on_demand_time_step)
+
+    zone = extract_origin_zone(origin_order[1], ond_locations_data)
         
     return OnDRoute(num_passenger_types, origin_order, destination_order, num_passenger_dict, origin_passenger_travel_times, 
-                    destination_passenger_travel_times, waiting_times, passenger_cost, start_time, end_time, time_zone_dict)
+                    destination_passenger_travel_times, waiting_times, passenger_cost, start_time, end_time, zone)
 end
 
 """
     Return dict[p] --> list of other passengers are compatible with passenger p 
 """
-function compute_passenger_dict(ond_locations_data::DataFrame, on_demand_time_step::Int)
+function compute_passenger_dict(ond_locations_data::DataFrame)
     passenger_dict = Dict{Int, Vector{Int}}()
 
-    #Passengers within X driving time and origin/destination within a certain radius
-    passenger_ids = ond_locations_data.passenger_id
+    #Passengers with the same zone 
+    ond_locations_filtered = ond_locations_data[ond_locations_data.origin_zone .== ond_locations_data.dest_zone, :]
+    passenger_ids = ond_locations_filtered.passenger_id
     for p in passenger_ids
         p_list = Int[]
-        passenger_origin, passenger_destination, _ = extract_passenger_data(p, ond_locations_data)
+        origin_zone = extract_origin_zone(p, ond_locations_data)
+        destination_zone = extract_destination_zone(p, ond_locations_data)
         for q in passenger_ids
-            other_passenger_origin, other_passenger_destination, _ = extract_passenger_data(q, ond_locations_data)
-            if ((driving_time(passenger_origin, other_passenger_origin, on_demand_time_step) <= 5) && 
-                (driving_time(passenger_destination, other_passenger_destination, on_demand_time_step) <= 5)) ||
-                (driving_time(passenger_destination, other_passenger_origin, on_demand_time_step) <= 5) || 
-                (driving_time(passenger_origin, other_passenger_destination, on_demand_time_step) <= 5) 
+            other_origin_zone = extract_origin_zone(q, ond_locations_data)
+            other_destination_zone = extract_destination_zone(q, ond_locations_data)
+            if (origin_zone == other_origin_zone) && (destination_zone == other_destination_zone)
                 push!(p_list, q)
             end
         end
@@ -302,7 +218,7 @@ function build_1_string(kappa::Int, passenger_id::Int, max_on_demand_time::Int, 
         destination_order = [passenger_id]
         num_passenger_dict = Dict(passenger_id => k)
         route = create_one_route(start_time, 1, origin_order, destination_order, num_passenger_dict, ond_locations_data, 
-            max_on_demand_time, time_horizon, on_demand_time_step)
+            max_on_demand_time, on_demand_time_step)
         if (route.passenger_cost >= 0) && (route.end_time <= time_horizon)
             push!(routes, route)
         end
@@ -316,6 +232,7 @@ end
 function build_k_route_1(k::Int, max_on_demand_time::Int, start_time::Float64, ond_locations_data::DataFrame, 
     origin_order::Vector{Int}, routes::Vector{OnDRoute}, time_horizon::Float64, on_demand_time_step::Int)
 
+    cost_route_dict = Dict{Float64, OnDRoute}()
     num_passenger_dict = Dict{Int, Int}()  
     for p in origin_order
         num_passenger_dict[p] = 1
@@ -324,19 +241,22 @@ function build_k_route_1(k::Int, max_on_demand_time::Int, start_time::Float64, o
     feasible_list = []
     for destination_order in unique(collect(permutations(origin_order, k)))
         route = create_one_route(start_time, k, origin_order, destination_order, num_passenger_dict, ond_locations_data, 
-            max_on_demand_time, time_horizon, on_demand_time_step)
+            max_on_demand_time, on_demand_time_step)
         bool_cost = (route.passenger_cost >= 0) && (route.end_time <= time_horizon)
         push!(feasible_list, bool_cost)
         if bool_cost
             push!(routes, route)
+            #cost_route_dict[route.passenger_cost] = route
         end
     end
-
-    if any(feasible_list)
-        return true, routes
-    else
-        return false, routes
+    #=
+    if !isempty(cost_route_dict)
+        min_key = minimum(keys(cost_route_dict))
+        min_route = cost_route_dict[min_key]
+        push!(routes, min_route)
     end
+    =#
+    return any(feasible_list), routes
 end
 
 """
@@ -346,17 +266,26 @@ function build_2_string(kappa::Int, max_on_demand_time::Int, start_time::Float64
     origin_order::Vector{Int}, routes::Vector{OnDRoute}, time_horizon::Float64, on_demand_time_step::Int)
     for k in 3:kappa
         for j in 1:(k-1)
+            cost_route_dict = Dict{Float64, OnDRoute}()
             num_passenger_dict = Dict{Int, Int}()  
             num_passenger_dict[origin_order[1]] = j
             num_passenger_dict[origin_order[2]] = k-j
 
             for destination_order in unique(collect(permutations(origin_order, 2)))
                 route = create_one_route(start_time, 2, origin_order, destination_order, num_passenger_dict, ond_locations_data, 
-                    max_on_demand_time, time_horizon, on_demand_time_step)
+                    max_on_demand_time, on_demand_time_step)
                 if (route.passenger_cost >= 0) && (route.end_time <= time_horizon)
                     push!(routes, route)
+                    #cost_route_dict[route.passenger_cost] = route
                 end
             end
+            #=
+            if !isempty(cost_route_dict)
+                min_key = minimum(keys(cost_route_dict))
+                min_route = cost_route_dict[min_key]
+                push!(routes, min_route)
+            end
+            =#
         end
     end
     return routes
@@ -365,26 +294,37 @@ end
 """
     Build 3-strings with >1 number of passengers
 """
-function build_3_string(max_on_demand_time::Int, start_time::Float64, ond_locations_data::DataFrame, 
-    origin_order::Vector{Int}, routes::Vector{OnDRoute}, time_horizon::Float64, on_demand_time_step::Int)
+function build_3_string(kappa::Int, max_on_demand_time::Int, start_time::Float64, ond_locations_data::DataFrame, origin_order::Vector{Int}, 
+    routes::Vector{OnDRoute}, time_horizon::Float64, on_demand_time_step::Int)
 
-    for num_passenger_order in unique(collect(permutations(([1,1,2]), 3)))
-        num_passenger_dict = Dict{Int, Int}()  
-        num_passenger_dict[origin_order[1]] = num_passenger_order[1]
-        num_passenger_dict[origin_order[2]] = num_passenger_order[2]
-        num_passenger_dict[origin_order[3]] = num_passenger_order[3]
-        
-        for destination_order in unique(collect(permutations(origin_order, 3)))
-            route = create_one_route(start_time, 3, origin_order, destination_order, num_passenger_dict, ond_locations_data, 
-                max_on_demand_time, time_horizon, on_demand_time_step)
-            if (route.passenger_cost >= 0) && (route.end_time <= time_horizon)
-                push!(routes, route)
+    for k in 4:kappa
+        order_vectors = string3_helper(k)
+        for num_passenger_order in order_vectors
+            cost_route_dict = Dict{Float64, OnDRoute}()
+            num_passenger_dict = Dict{Int, Int}()  
+            num_passenger_dict[origin_order[1]] = num_passenger_order[1]
+            num_passenger_dict[origin_order[2]] = num_passenger_order[2]
+            num_passenger_dict[origin_order[3]] = num_passenger_order[3]
+            
+            for destination_order in unique(collect(permutations(origin_order, 3)))
+                route = create_one_route(start_time, 3, origin_order, destination_order, num_passenger_dict, ond_locations_data, 
+                    max_on_demand_time, on_demand_time_step)
+                if (route.passenger_cost >= 0) && (route.end_time <= time_horizon)
+                    push!(routes, route)
+                    #cost_route_dict[route.passenger_cost] = route
+                end
             end
+            #=
+            if !isempty(cost_route_dict)
+                min_key = minimum(keys(cost_route_dict))
+                min_route = cost_route_dict[min_key]
+                push!(routes, min_route)
+            end
+            =#
         end
     end
     return routes
 end
-
 
 """
     Compute cost associated with an on-demand route

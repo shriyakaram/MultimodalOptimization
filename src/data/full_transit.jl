@@ -62,11 +62,7 @@ function check_origin_node(origin_node::TransitNode, origin::Tuple{Float64, Floa
     station_boarding_time = origin_node.time
     station_location = station_lat_lon(origin_station, transit_stops_line)
     walking_time = walking_time_station(origin, station_location, transit_time_step)
-    if (departure_time + walking_time) <= station_boarding_time
-        return true
-    else
-        return false
-    end
+    return (departure_time + walking_time) <= station_boarding_time
 end
 
 """
@@ -123,13 +119,12 @@ function create_passenger_transit_routes(passenger_id::Int, max_walking_time::In
 
     for line_frequency in line_frequency_list
         line = line_frequency.line
-        frequency = line_frequency.frequency
         transit_stops_line = filter(row -> row.line == line, transit_stops)
         routes = find_routes(max_walking_time, line_frequency, origin, destination, departure_time, transit_stops_line, transit_time_step)
         
         if !isempty(routes)
             routes_cost = [compute_transit_route_time(departure_time, destination, r, transit_stops_line, transit_time_step) for r in routes]
-            ptr = PassengerTransitRoute(passenger_id, line, frequency, routes, routes_cost)
+            ptr = PassengerTransitRoute(passenger_id, line, routes, routes_cost)
             push!(passenger_transit_routes, ptr)
         end
     end

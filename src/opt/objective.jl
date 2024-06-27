@@ -12,28 +12,26 @@ function add_objective(model::Model, data::OnDemandTransitData)
     obj_expression = AffExpr()
     
     #od cost to obj_expression
-    for g in eachindex(y_od)
+    for g in eachindex(data.OnD_routes)
         add_to_expression!(obj_expression, data.OnD_routes[g].passenger_cost, y_od[g])
     end
 
     #pick-up cost to obj_expression
-    for g in eachindex(y_pickup)
+    for g in eachindex(data.pickup_routes)
         add_to_expression!(obj_expression, data.pickup_routes[g].passenger_cost, y_pickup[g])
     end
 
     #pick-up cost to obj_expression
-    for g in eachindex(y_dropoff)
+    for g in eachindex(data.dropoff_routes)
         add_to_expression!(obj_expression, data.dropoff_routes[g].passenger_cost, y_dropoff[g])
     end
 
     #full transit cost to obj_expression
     for p in eachindex(data.passengers)
         for l in lines_passenger(p, data)
-            for f in freq_passenger(p, l, data)
-                routes = routes_passenger(p, l, f, data)
-                for r in routes
-                    add_to_expression!(obj_expression, data.passengers[p].demand * route_cost_passenger(p, l, f, r, data), z_tr[p, l, f, r])
-                end
+            routes = routes_passenger(p, l, data)
+            for r in routes
+                add_to_expression!(obj_expression, data.passengers[p].demand * route_cost_passenger(p, l, r, data), z_tr[p, l, r])
             end
         end
     end
@@ -41,11 +39,9 @@ function add_objective(model::Model, data::OnDemandTransitData)
     #feeder transit cost to obj_expression
     for p in eachindex(data.passengers)
         for l in lines_passenger_feeder(p, data)
-            for f in freq_passenger_feeder(p, l, data)
-                routes = routes_passenger_feeder(p, l, f, data)
-                for r in routes
-                    add_to_expression!(obj_expression, data.passengers[p].demand * route_cost_passenger_feeder(p, l, f, r, data), z_mm[p, l, f, r])
-                end
+            routes = routes_passenger_feeder(p, l, data)
+            for r in routes
+                add_to_expression!(obj_expression, data.passengers[p].demand * route_cost_passenger_feeder(p, l, r, data), z_mm[p, l, r])
             end
         end
     end

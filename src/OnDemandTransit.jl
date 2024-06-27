@@ -9,6 +9,7 @@ using Printf
 using LinearAlgebra
 using Statistics
 using Parameters
+using Base
 
 include("data/struct.jl")
 include("data/load.jl")
@@ -27,7 +28,5 @@ include("opt/constraints.jl")
 include("opt/optimize.jl")
 
 include("output/output.jl")
-
-
 
 end

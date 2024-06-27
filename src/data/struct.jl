@@ -20,8 +20,8 @@ mutable struct OnDRoute
 	start_time::Float64
 	"Route end time"
 	end_time::Float64
-	"Time zone dictionary"
-	time_zone_dict::Dict{Int, Int}
+	"Zone"
+	zone::Int
 end
 
 "Pick-up route"
@@ -98,10 +98,6 @@ mutable struct LineFrequency
 	line::Int
 	"Frequency"
 	frequency::Int
-	"Line/frequency start times"
-	start_times::Vector{Float64}
-	"Line/frequency end times"
-	end_times::Vector{Float64}
 	"Station IDs for line"
 	stations_ids::Vector{Int}
 end
@@ -112,8 +108,6 @@ mutable struct PassengerTransitRoute
 	passenger_id::Int
 	"Line"
 	line::Int
-	"Frequency"
-	frequency::Int
 	"List of transit routes"
 	transit_routes::Vector{TransitRoute}
 	"Travel time"
@@ -168,8 +162,6 @@ end
     kappa::Int
     "Time horizon"
     time_horizon::Float64
-    "Frequency set"
-    frequency_set::Vector{Int} 
     "Maximum on-demand route time"
     max_on_demand_time::Int
     "Maximum first waiting time"
@@ -180,6 +172,8 @@ end
     transit_time_step::Int
 	"Maximum waiting time"
     max_waiting::Int
+	"Initial start time from the departure time"
+	initial_start_departure::Float64
 end
 
 """

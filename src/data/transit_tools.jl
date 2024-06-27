@@ -24,7 +24,7 @@ end
 """
 function frequency_nodes(frequency::Int, time_horizon::Float64, transit_stops_line::DataFrame)
     result = TransitNode[]
-    for i in frequency:frequency:time_horizon
+    for i in 0:frequency:time_horizon
         node_list_st_i = start_time(i, time_horizon, transit_stops_line)
         append!(result, node_list_st_i)
     end        
@@ -56,22 +56,4 @@ end
 function station_travel_time(first_station::Int, second_station::Int, transit_stops_line::DataFrame)
     filtered_transit_stops = filter(row -> row[:stop_sequence] > first_station && row[:stop_sequence] <= second_station, transit_stops_line)
     return sum(filtered_transit_stops.time_prev_stop)
-end
-
-"""
-    Return start and end times for line/frequency transit nodes
-"""
-function find_start_end_times(transit_stops_line::DataFrame, transit_nodes::Vector{TransitNode})
-    last_station = transit_stops_line[end, "stop_sequence"]
-    start_times = Float64[]
-    end_times = Float64[]
-    for i in eachindex(transit_nodes)
-        if transit_nodes[i].station == 1
-            push!(start_times, transit_nodes[i].time)
-        end
-        if transit_nodes[i].station == last_station
-            push!(end_times, transit_nodes[i].time)
-        end
-    end 
-    return start_times, end_times
 end

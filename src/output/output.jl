@@ -74,10 +74,8 @@ function total_transit_cost(odt::OnDemandTransitModel)
     passenger_ids = [p.passenger_id for p in data.passengers]
     for p in passenger_ids
         for l in lines_passenger(p, data)
-            for f in freq_passenger(p, l, data)
-                for r in routes_passenger(p, l, f, data)
-                    full_transit_cost += route_cost_passenger(p, l, f, r, data) * z_tr[p, l, f, r]
-                end
+            for r in routes_passenger(p, l, data)
+                full_transit_cost += route_cost_passenger(p, l, r, data) * z_tr[p, l, r]
             end
         end
     end
@@ -94,10 +92,8 @@ function total_transit_feeder_cost(odt::OnDemandTransitModel)
     passenger_ids = [p.passenger_id for p in data.passengers]
     for p in passenger_ids
         for l in lines_passenger_feeder(p, data)
-            for f in freq_passenger_feeder(p, l, data)
-                for r in routes_passenger_feeder(p, l, f, data)
-                    feeder_cost += route_cost_passenger_feeder(p, l, f, r, data) * z_mm[p, l, f, r]
-                end
+            for r in routes_passenger_feeder(p, l, data)
+                feeder_cost += route_cost_passenger_feeder(p, l, r, data) * z_mm[p, l, r]
             end
         end
     end
@@ -130,11 +126,10 @@ end
 """
 function vehicle_zone_solution(odt::OnDemandTransitModel)
     veh_od_zone = odt.model[:veh_od_zone]
-    veh_mm_zone = odt.model[:veh_mm_zone]
     zone_ids = zone_id_list(odt.data)
     vehicle_zone_df = DataFrame()
     for z in zone_ids
-        row = (zone_id = z, veh_ond = value(veh_od_zone[z]), veh_mm = value(veh_mm_zone[z]))
+        row = (zone_id = z, veh_ond = value(veh_od_zone[z]))
         push!(vehicle_zone_df, row)
     end
     return vehicle_zone_df
@@ -157,14 +152,12 @@ function passenger_station_solution(odt::OnDemandTransitModel, passenger_mode_di
 
         if passenger_mode_dict[p] == 2
             for l in lines_passenger(p, data)
-                for f in freq_passenger(p, l, data)
-                    for r in routes_passenger(p, l, f, data)
-                        if value(z_tr[p, l, f, r]) >= 1
-                            origin_station = r.origin_node.station
-                            destination_station = r.destination_node.station
-                            row = (passenger_id = p, mode = "Full transit", origin_station = origin_station, destination_station = destination_station, line = l)
-                            push!(passenger_station_df, row)
-                        end
+                for r in routes_passenger(p, l, data)
+                    if abs(value(z_tr[p, l, r]) - 1) <= tol
+                        origin_station = r.origin_node.station
+                        destination_station = r.destination_node.station
+                        row = (passenger_id = p, mode = "Full transit", origin_station = origin_station, destination_station = destination_station, line = l)
+                        push!(passenger_station_df, row)
                     end
                 end
             end
@@ -172,14 +165,12 @@ function passenger_station_solution(odt::OnDemandTransitModel, passenger_mode_di
 
         if passenger_mode_dict[p] == 3
             for l in lines_passenger_feeder(p, data)
-                for f in freq_passenger_feeder(p, l, data)
-                    for r in routes_passenger_feeder(p, l, f, data)
-                        if value(z_mm[p, l, f, r]) >= 1
-                            origin_station = r.origin_node.station
-                            destination_station = r.destination_node.station
-                            row = (passenger_id = p, mode = "Multimodal", origin_station = origin_station, destination_station = destination_station, line = l)
-                            push!(passenger_station_df, row)
-                        end
+                for r in routes_passenger_feeder(p, l, data)
+                    if abs(value(z_mm[p, l, r]) - 1) <= tol
+                        origin_station = r.origin_node.station
+                        destination_station = r.destination_node.station
+                        row = (passenger_id = p, mode = "Multimodal", origin_station = origin_station, destination_station = destination_station, line = l)
+                        push!(passenger_station_df, row)
                     end
                 end
             end
@@ -187,26 +178,6 @@ function passenger_station_solution(odt::OnDemandTransitModel, passenger_mode_di
         
     end
     return passenger_station_df
-end
-
-"""
-    Return optimal line/frequencies
-"""
-function line_frequency_solution(odt::OnDemandTransitModel)
-    x = JuMP.value.(odt.model[:x])
-    data = odt.data
-    lines, frequencies = line_frequency_pairs(data.line_frequencies)
-    line_frequency_df = DataFrame()
-    for l in lines
-        freq_l = x[l,:]
-        for freq in eachindex(freq_l)
-            if freq_l[freq] == 1
-                row = (line = l, frequency = frequencies[freq])
-                push!(line_frequency_df, row)
-            end
-        end
-    end
-    return line_frequency_df
 end
 
 """
@@ -263,10 +234,8 @@ function multimodal_passenger_cost(p::Int, odt::OnDemandTransitModel)
     #transit cost
     feeder_cost = 0
     for l in lines_passenger_feeder(p, data)
-        for f in freq_passenger_feeder(p, l, data)
-            for r in routes_passenger_feeder(p, l, f, data)
-                feeder_cost += route_cost_passenger_feeder(p, l, f, r, data) * z_mm[p, l, f, r]
-            end
+        for r in routes_passenger_feeder(p, l, data)
+            feeder_cost += route_cost_passenger_feeder(p, l, r, data) * z_mm[p, l, r]
         end
     end
 

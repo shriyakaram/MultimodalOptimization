@@ -4,38 +4,36 @@
     Implemented for kappa = 4  
 """
 function create_od_routes(kappa::Int, max_on_demand_time::Int, max_first_waiting_time::Float64, ond_locations_data::DataFrame,
-    time_horizon::Float64, on_demand_time_step::Int)
+    time_horizon::Float64, on_demand_time_step::Int, initial_start_departure::Float64)
 
-    passenger_ids = ond_locations_data.passenger_id
-    passenger_dict = compute_passenger_dict(ond_locations_data, on_demand_time_step)
+    passenger_dict = compute_passenger_dict(ond_locations_data)
+    passenger_ids = collect(keys(passenger_dict))
     routes = OnDRoute[]
 
     for p in passenger_ids
-        route_start_times = calc_route_start_times(max_first_waiting_time, p, ond_locations_data, on_demand_time_step)
+        route_start_times = calc_route_start_times(max_first_waiting_time, p, ond_locations_data, on_demand_time_step, initial_start_departure)
         for start_time in route_start_times
             routes = build_1_string(kappa, p, max_on_demand_time, start_time, ond_locations_data, routes, time_horizon, 
                 on_demand_time_step)
-            if kappa >= 2
-                passenger_list = passenger_dict[p]
-                for l in passenger_list
-                    bool_cost, routes = build_k_route_1(2, max_on_demand_time, start_time, ond_locations_data, [p,l], routes, time_horizon, 
-                        on_demand_time_step)
-                    if bool_cost && kappa >= 3
-                        for q in filter(x -> !(x in Set(l)), passenger_list)
-                            bool_cost, routes = build_k_route_1(3, max_on_demand_time, start_time, ond_locations_data, [p,l,q], routes, 
-                                time_horizon, on_demand_time_step)
-                            if bool_cost && kappa >= 4
-                                for w in filter(x -> !(x in [l,q]), passenger_list)
-                                    bool_cost, routes = build_k_route_1(4, max_on_demand_time, start_time, ond_locations_data, [p,l,q,w], routes, 
-                                        time_horizon, on_demand_time_step)
-                                end
-                                routes = build_3_string(max_on_demand_time, start_time, ond_locations_data, [p,l,q],
-                                    routes, time_horizon, on_demand_time_step)
-                            end
+            passenger_list = passenger_dict[p]
+            for l in passenger_list
+                bool_cost, routes = build_k_route_1(2, max_on_demand_time, start_time, ond_locations_data, [p,l], routes, time_horizon, 
+                    on_demand_time_step)
+                if bool_cost
+                    for q in filter(x -> !(x in Set(l)), passenger_list)
+                        bool_cost, routes = build_k_route_1(3, max_on_demand_time, start_time, ond_locations_data, [p,l,q], routes, 
+                            time_horizon, on_demand_time_step)
+                        if bool_cost
+                            #for w in filter(x -> !(x in [l,q]), passenger_list)
+                            #    bool_cost, routes = build_k_route_1(4, max_on_demand_time, start_time, ond_locations_data, [p,l,q,w], routes, 
+                            #        time_horizon, on_demand_time_step)
+                            #end
+                            routes = build_3_string(kappa, max_on_demand_time, start_time, ond_locations_data, [p,l,q],
+                                routes, time_horizon, on_demand_time_step)
                         end
-                        routes = build_2_string(kappa, max_on_demand_time, start_time, ond_locations_data, [p,l],
-                            routes, time_horizon, on_demand_time_step)
                     end
+                    routes = build_2_string(kappa, max_on_demand_time, start_time, ond_locations_data, [p,l], routes, time_horizon, 
+                        on_demand_time_step)
                 end
             end
         end
@@ -49,14 +47,15 @@ end
     Implemented for kappa = 4 
 """
 function create_pickup_routes(kappa::Int, max_on_demand_time::Int, max_first_waiting_time::Float64, time_horizon::Float64,
-    ond_locations_data::DataFrame, transit_stops::DataFrame, on_demand_time_step::Int)
+    ond_locations_data::DataFrame, transit_stops::DataFrame, passengers::Vector{Passenger}, on_demand_time_step::Int, 
+    initial_start_departure::Float64, max_waiting::Int)
 
     routes = PickupRoute[]
     for row in eachrow(transit_stops)
         line = row.line 
         station = row.stop_sequence
         routes = create_pickup_routes_line_station(kappa, max_on_demand_time, max_first_waiting_time, line, station, time_horizon,
-            ond_locations_data, transit_stops, routes, on_demand_time_step)
+            ond_locations_data, transit_stops, routes, passengers, on_demand_time_step, initial_start_departure, max_waiting)
     end
 
     return routes
@@ -74,7 +73,7 @@ function create_dropoff_routes(kappa::Int, max_on_demand_time::Int, time_horizon
         line = row.line
         station = row.stop_sequence
         routes = create_dropoff_routes_line_station(kappa, max_on_demand_time, line, station, time_horizon, ond_locations_data, 
-            transit_stops, routes, passengers, on_demand_time_step, max_waiting)
+        transit_stops, routes, passengers, on_demand_time_step, max_waiting)
     end
 
     return routes
@@ -83,18 +82,15 @@ end
 """
     For the input data, create a list of all line/frequency pairs
 """
-function create_line_frequency(frequency_set::Vector{Int}, time_horizon::Float64, transit_stops::DataFrame)
+function create_line_frequency(time_horizon::Float64, transit_stops::DataFrame)
     line_frequency_list = LineFrequency[]
     lines = unique(transit_stops.line)
-
     for l in lines
-        for f in frequency_set
-            transit_stops_line = filter(row -> row.line == l, transit_stops)
-            f_nodes = frequency_nodes(f, time_horizon, transit_stops_line)
-            start_times, end_times = find_start_end_times(transit_stops_line, f_nodes)
-            stations_ids = transit_stops_line[!, "stop_sequence"]
-            push!(line_frequency_list, LineFrequency(f_nodes, l, f, start_times, end_times, stations_ids))
-        end
+        transit_stops_line = filter(row -> row.line == l, transit_stops)
+        f = transit_stops_line[1, "frequency"]
+        f_nodes = frequency_nodes(f, time_horizon, transit_stops_line)
+        stations_ids = transit_stops_line[!, "stop_sequence"]
+        push!(line_frequency_list, LineFrequency(f_nodes, l, f, stations_ids))
     end
     return line_frequency_list
 end
@@ -143,16 +139,18 @@ function load_data(transit_file::AbstractString, on_demand_file::AbstractString,
     max_walking_time = pp.max_walking_time
     kappa = pp.kappa
     time_horizon = pp.time_horizon
-    frequency_set = pp.frequency_set
     max_on_demand_time = pp.max_on_demand_time
     max_first_waiting_time = pp.max_first_waiting_time
     on_demand_time_step = pp.on_demand_time_step
     transit_time_step = pp.transit_time_step
     max_waiting = pp.max_waiting
+    initial_start_departure = pp.initial_start_departure
 
     transit_stops.time_prev_stop = ceil.(transit_stops.time_prev_stop ./ transit_time_step) .* transit_time_step
+    ond_locations_data.departure_time = Float64.(ond_locations_data.departure_time)
+
     t = time()
-    line_frequencies = create_line_frequency(frequency_set, time_horizon, transit_stops)
+    line_frequencies = create_line_frequency(time_horizon, transit_stops)
     @printf("%.2f line frequency seconds\n", time() - t)
     t = time()
     passengers = create_passengers(ond_locations_data, transit_stops, max_walking_time, line_frequencies, transit_time_step)
@@ -161,11 +159,12 @@ function load_data(transit_file::AbstractString, on_demand_file::AbstractString,
     zone_pairs = get_unique_zones(ond_locations_data)
     @printf("%.2f zones seconds\n", time() - t)
     t = time()
-    on_demand_routes = create_od_routes(kappa, max_on_demand_time, max_first_waiting_time, ond_locations_data, time_horizon, on_demand_time_step)
+    on_demand_routes = create_od_routes(kappa, max_on_demand_time, max_first_waiting_time, ond_locations_data, time_horizon, 
+        on_demand_time_step, initial_start_departure)
     @printf("%.2f on-demand seconds\n", time() - t)
     t = time()
     pickup_routes = create_pickup_routes(kappa, max_on_demand_time, max_first_waiting_time, time_horizon, ond_locations_data, 
-        transit_stops, on_demand_time_step)
+        transit_stops, passengers, on_demand_time_step, initial_start_departure, max_waiting)
     @printf("%.2f pick-up seconds\n", time() - t)
     t = time()
     dropoff_routes = create_dropoff_routes(kappa, max_on_demand_time, time_horizon, ond_locations_data, transit_stops, passengers, 

@@ -1,7 +1,7 @@
 """
     Constructs an OnDemandTransitModel object
 """
-function run_opt(num_transit_lines::Int, pp::PermanentParameters, F::Int, extra_veh_od::Int, extra_veh_mm::Int)
+function run_opt(num_transit_lines::Int, pp::PermanentParameters, F::Int)
 
     max_waiting = pp.max_waiting
     transit_time_step = pp.transit_time_step
@@ -16,13 +16,11 @@ function run_opt(num_transit_lines::Int, pp::PermanentParameters, F::Int, extra_
     #run model
     t = time()
     data = OnDemandTransit.load_data(transit_file, on_demand_file, pp)
-
     @printf("%.2f pre-processing seconds\n", time() - t)
     t = time()
     model = Model(Gurobi.Optimizer)
-    veh_tr, veh_tr_time, veh_od_zone, veh_od_zone_time, veh_mm_zone, 
-        veh_mm_zone_time, m = OnDemandTransit.add_vehicle_zone_variables!(transit_times, ondemand_times, model, data)
-    x, z_tr, z_mm = OnDemandTransit.add_transit_variables!(model, data)
+    veh_od_zone, m = OnDemandTransit.add_vehicle_zone_variables!(model, data)
+    z_tr, z_mm = OnDemandTransit.add_transit_variables!(model, data)
     y_od, y_pickup, y_dropoff = OnDemandTransit.add_ondemand_variables!(model, data)
     @printf("%.2f variables seconds\n", time() - t)
     t = time()
@@ -30,8 +28,7 @@ function run_opt(num_transit_lines::Int, pp::PermanentParameters, F::Int, extra_
     @printf("%.2f objective seconds\n", time() - t)
     t = time()
     OnDemandTransit.add_fleet_assignment_constraints!(model, data, F)
-    OnDemandTransit.add_transit_vehicle_constraints!(transit_times, transit_time_step, model, data)
-    OnDemandTransit.add_ondemand_vehicle_constraints!(ondemand_times, on_demand_time_step, extra_veh_od, extra_veh_mm, model, data)
+    OnDemandTransit.add_ondemand_vehicle_constraints!(ondemand_times, model, data)
     @printf("%.2f vehicle constraints seconds\n", time() - t)
     OnDemandTransit.add_mode_assignment_constraints!(model, data)
     t = time()
